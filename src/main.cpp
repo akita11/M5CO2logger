@@ -1,7 +1,28 @@
 #include "M5Unified.h"
 #include "M5UnitENV.h"
+#include <SD.h>
 
 SCD4X scd4x;
+
+File logFile;
+uint32_t t0 = 0;
+
+#define LOG_FILENAME "/log.csv"
+bool fLogging = false;
+
+void ShowStatus(){
+	M5.Display.fillRect(200, 0, 120, 20, BLACK);
+	M5.Display.setCursor(200, 0);
+	if (fLogging == true){
+		M5.Lcd.setTextColor(GREEN);
+		M5.Display.printf("Logging");
+	}
+	else{
+		M5.Lcd.setTextColor(RED);
+		M5.Display.printf("Stopped");
+	}
+}
+
 
 void setup() {
     Serial.begin(115200);
@@ -11,6 +32,13 @@ void setup() {
         Serial.println("Couldn't find SCD4X");
         while (1) delay(1);
     }
+	SPI.begin();
+  	while(false == 	SD.begin(GPIO_NUM_4, SPI, 15000000)){
+		M5.Display.setCursor(200, 0);
+		M5.Display.println("no SD");
+		delay(500);
+	}
+	ShowStatus();
 
     uint16_t error;
     error = scd4x.stopPeriodicMeasurement();
@@ -33,7 +61,6 @@ uint16_t conv_value(float value, float min, float max) {
 	else if (v > max) v = max;
 	return(v);
 }	
-
 
 void loop() {
     float co2, temp, rh;
@@ -65,6 +92,28 @@ void loop() {
 		M5.Lcd.setTextColor(color[0]); M5.Lcd.printf("CO2(0-5000)\n");
 		M5.Lcd.setTextColor(color[1]); M5.Lcd.printf("Temp(0-100)\n");
 		M5.Lcd.setTextColor(color[2]); M5.Lcd.printf("Hum(0-100)\n");
+		ShowStatus();
+		uint32_t tm = millis() - t0;
+		logFile.printf("%d,%f,%f,%f\n", tm, co2, temp, rh);
 	}
-    delay(1000);
+	for (uint8_t i = 0; i < 100; i++){
+		M5.update();
+		if (M5.BtnA.wasClicked()){
+			if (fLogging == false){
+				t0 = millis();
+				fLogging = true;
+				logFile = SD.open(LOG_FILENAME, "a");
+				logFile.printf("time,CO2,Temp,RH\n");
+				i = 100;
+				ShowStatus();
+			}
+			else{
+				logFile.close();
+				fLogging = false;
+				i = 100;
+				ShowStatus();
+			}
+		}
+	    delay(10);
+	}
 }
